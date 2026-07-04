@@ -588,6 +588,15 @@ export function computeDefense(
   // 教練指定：自由球員替換後排攔中（6 號位）
   const liberoId = 6;
   const sixPos = interpolatePresets(attackPos, opts, blockers, blockerZPositions);
+  // 教練指定：1、5 號位有身高優勢，站責任區塊偏前（深球可跳起提前攔截）
+  // 前移 1.2m，但不淺於 x=5.0；用 max/min 組合保持連續不跳動
+  for (const idx of [0, 4]) {
+    const id = idx + 1;
+    if (!blockers.has(id)) {
+      const p = sixPos[idx];
+      sixPos[idx] = { x: Math.max(p.x - 1.2, Math.min(p.x, 5.0)), z: p.z };
+    }
+  }
   const rawPlayers = buildPlayers(sixPos, blockers, liberoId);
   const shadow = buildBlockShadow(attackPos, blockers, rawPlayers);
   const players = shiftOutOfShadow(rawPlayers, shadow, axisDir);
