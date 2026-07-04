@@ -43,16 +43,18 @@ function MyPlayerUnit({ player, label, controlsRef }: MyPlayerUnitProps) {
   const { onPointerDown, draggingRef } = useGroundDrag({
     controlsRef,
     onDrag: p => {
+      // p 為世界座標。呈現層鏡像 worldZ=9−邏輯z，故存回 store 前反向：邏輯z=9−worldZ
       useTacticsStore.getState().setEditOverridePosition(player.id, {
         x: clamp(p.x, 0.3, 8.7),
-        z: clamp(p.z, 0.3, 8.7),
+        z: clamp(9 - p.z, 0.3, 8.7),
       });
     },
   });
 
   // 首次掛載直接放到目標點（之後全靠平滑移動）
+  // 首次掛載直接放到目標點（世界 z = 9 − 邏輯z 鏡像）
   useLayoutEffect(() => {
-    groupRef.current?.position.set(posRef.current.x, 0, posRef.current.z);
+    groupRef.current?.position.set(posRef.current.x, 0, 9 - posRef.current.z);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -61,7 +63,7 @@ function MyPlayerUnit({ player, label, controlsRef }: MyPlayerUnitProps) {
     if (!group) return;
     const dt = Math.min(rawDt, 0.1);
     const k = dampFactor(draggingRef.current ? DRAG_TAU : SMOOTH_TAU, dt);
-    tmpTarget.set(posRef.current.x, 0, posRef.current.z);
+    tmpTarget.set(posRef.current.x, 0, 9 - posRef.current.z);
     group.position.lerp(tmpTarget, k);
   });
 

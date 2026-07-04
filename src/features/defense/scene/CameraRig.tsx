@@ -22,10 +22,13 @@ interface CameraPreset {
 
 // 我方半場中心約 (4.5, 0, 4.5)，整場中心 (0, 0, 4.5)
 const PRESETS: Record<CameraView, CameraPreset> = {
-  // 正上方俯視（講解佔位）：稍偏我方側讓對方場在畫面上方
+  // 近俯視（講解佔位）：網在畫面上方、我方半場在下方。
+  // 配合呈現層鏡像 worldZ=9−z，此視角下 screen-up≈−X（網在上）、
+  // screen-right=−Z，使前排近網左→右＝4-3-2、後排左→右＝5-6-1。
+  // 不用純正上方（避免 up 向量退化），略偏一角。
   top: {
-    position: new THREE.Vector3(1.6, 21, 4.5),
-    target: new THREE.Vector3(0, 0, 4.5),
+    position: new THREE.Vector3(7, 20, 4.5),
+    target: new THREE.Vector3(2, 0, 4.5),
   },
   // 我方底線後方低視角看向網子
   baseline: {

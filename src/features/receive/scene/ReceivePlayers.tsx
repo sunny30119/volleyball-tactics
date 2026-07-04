@@ -56,9 +56,10 @@ function PlayerUnit({ spot, label, controlsRef }: UnitProps) {
   const { onPointerDown, draggingRef } = useGroundDrag({
     controlsRef,
     onDrag: (p) => {
+      // p 為世界座標。呈現層鏡像 worldZ=9−邏輯z，故存回 store 前反向：邏輯z=9−worldZ
       setOverridePosition(spot.positionNo as PositionNo, {
         x: clamp(p.x, DRAG_MIN, DRAG_MAX),
-        z: clamp(p.z, DRAG_MIN, DRAG_MAX),
+        z: clamp(9 - p.z, DRAG_MIN, DRAG_MAX),
       });
     },
   });
@@ -68,12 +69,12 @@ function PlayerUnit({ spot, label, controlsRef }: UnitProps) {
     if (!group) return;
     // 拖曳中直接吸附到手指，不做平滑（避免落後感）；否則指數平滑
     if (draggingRef.current) {
-      group.position.set(posRef.current.x, 0, posRef.current.z);
+      group.position.set(posRef.current.x, 0, 9 - posRef.current.z);
       return;
     }
     const dt = Math.min(rawDt, 0.1);
     const k = 1 - Math.exp(-dt / SMOOTH_TAU);
-    tmpTarget.set(posRef.current.x, 0, posRef.current.z);
+    tmpTarget.set(posRef.current.x, 0, 9 - posRef.current.z);
     group.position.lerp(tmpTarget, k);
   });
 
@@ -81,7 +82,7 @@ function PlayerUnit({ spot, label, controlsRef }: UnitProps) {
   const labelColor = spot.role === 'L' ? '#212121' : '#ffffff';
 
   return (
-    <group ref={groupRef} position={[spot.pos.x, 0, spot.pos.z]}>
+    <group ref={groupRef} position={[spot.pos.x, 0, 9 - spot.pos.z]}>
       {/* 身體 / 頭部本身即為拖曳把手 */}
       <mesh
         geometry={bodyGeometry}

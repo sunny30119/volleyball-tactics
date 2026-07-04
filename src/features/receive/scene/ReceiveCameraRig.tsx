@@ -23,10 +23,12 @@ interface CameraPreset {
 }
 
 const PRESETS: Record<CameraView, CameraPreset> = {
-  // 接發球講解主要用上帝視角
+  // 近俯視（講解站位）：網在畫面上方、我方半場在下方。
+  // 配合呈現層鏡像 worldZ=9−z，前排左→右＝4-3-2、後排左→右＝5-6-1。
+  // 與功能一 top 一致設定。
   top: {
-    position: new THREE.Vector3(1.6, 21, 4.5),
-    target: new THREE.Vector3(0, 0, 4.5),
+    position: new THREE.Vector3(7, 20, 4.5),
+    target: new THREE.Vector3(2, 0, 4.5),
   },
   baseline: {
     position: new THREE.Vector3(14.5, 3, 4.5),
@@ -42,8 +44,8 @@ const PRESETS: Record<CameraView, CameraPreset> = {
   },
 };
 
-// 接發球初始視角用上帝視角（俯視最利於講解站位）
-export const INITIAL_CAMERA_POSITION: [number, number, number] = [1.6, 21, 4.5];
+// 接發球初始視角用近俯視（網在上，最利於講解站位；與 PRESETS.top 一致）
+export const INITIAL_CAMERA_POSITION: [number, number, number] = [7, 20, 4.5];
 const INITIAL_TARGET = PRESETS.top.target;
 
 const CAMERA_TAU = 0.35;

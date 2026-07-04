@@ -30,7 +30,8 @@ function LegalZoneBox({ zone }: { zone: LegalZone }) {
   const w = Math.max(zone.max.x - zone.min.x, 0.001); // x 方向
   const d = Math.max(zone.max.z - zone.min.z, 0.001); // z 方向
   const cx = (zone.min.x + zone.max.x) / 2;
-  const cz = (zone.min.z + zone.max.z) / 2;
+  // 呈現層水平鏡像：世界 z = 9 − 邏輯z
+  const cz = 9 - (zone.min.z + zone.max.z) / 2;
 
   const fillGeom = useMemo(() => new THREE.PlaneGeometry(w, d), [w, d]);
   const lineGeom = useMemo(() => {
@@ -84,18 +85,28 @@ function SetterPath() {
     return o ? { ...p, from: { ...o } } : p;
   }, [rotation, overrides]);
 
-  const points = useMemo<[number, number, number][] | null>(() => {
+  // 呈現層水平鏡像：世界 z = 9 − 邏輯z。此處先把起訖點鏡像到世界座標，
+  // 後續箭翼計算沿用世界座標即可正確指向網右(2號位側)。
+  const worldPath = useMemo(() => {
     if (!path) return null;
-    const { from, to } = path;
+    return {
+      from: { x: path.from.x, z: 9 - path.from.z },
+      to: { x: path.to.x, z: 9 - path.to.z },
+    };
+  }, [path]);
+
+  const points = useMemo<[number, number, number][] | null>(() => {
+    if (!worldPath) return null;
+    const { from, to } = worldPath;
     return [
       [from.x, PATH_Y, from.z],
       [to.x, PATH_Y, to.z],
     ];
-  }, [path]);
+  }, [worldPath]);
 
   const arrowPoints = useMemo<[number, number, number][] | null>(() => {
-    if (!path) return null;
-    const { from, to } = path;
+    if (!worldPath) return null;
+    const { from, to } = worldPath;
     const dx = to.x - from.x;
     const dz = to.z - from.z;
     const len = Math.hypot(dx, dz) || 1;
@@ -112,7 +123,7 @@ function SetterPath() {
       [to.x, PATH_Y, to.z],
       [b2x, PATH_Y, b2z],
     ];
-  }, [path]);
+  }, [worldPath]);
 
   if (!points || !arrowPoints) return null;
 

@@ -33,17 +33,21 @@ export function rayToGround(ray: THREE.Ray): Vec2 | null {
 }
 
 /**
- * 把地面多邊形（x,z 座標）轉成 ShapeGeometry。
+ * 把地面多邊形（x,z 邏輯座標）轉成 ShapeGeometry。
  * Shape 位於 XY 平面；配合 mesh rotation=[-PI/2,0,0]，
- * 局部 (x, y) 會映射到世界 (x, -y)，因此以 -z 當作 shape 的 y。
+ * 局部 (x, y) 會映射到世界 (x, -y)。
+ *
+ * 呈現層水平鏡像：世界 z = 9 − 邏輯z（左手系翻正，使前排左→右＝4-3-2、
+ * 後排左→右＝5-6-1）。因此以 (z − 9) 當作 shape 的 y（即 −(9 − z)）。
+ * logic 座標維持 z∈[0,9] 原定義，僅此呈現層鏡像。
  */
 export function useGroundPolygonGeometry(points: Vec2[] | null): THREE.ShapeGeometry | null {
   const geometry = useMemo(() => {
     if (!points || points.length < 3) return null;
     const shape = new THREE.Shape();
-    shape.moveTo(points[0].x, -points[0].z);
+    shape.moveTo(points[0].x, points[0].z - 9);
     for (let i = 1; i < points.length; i++) {
-      shape.lineTo(points[i].x, -points[i].z);
+      shape.lineTo(points[i].x, points[i].z - 9);
     }
     shape.closePath();
     return new THREE.ShapeGeometry(shape);

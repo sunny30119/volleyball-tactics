@@ -50,15 +50,17 @@ function AttackerUnit({ attacker, controlsRef }: AttackerUnitProps) {
       }
     },
     onDrag: p => {
+      // p 為世界座標。呈現層鏡像 worldZ=9−邏輯z，故存回 store 前反向：邏輯z=9−worldZ
       useTacticsStore.getState().moveAttacker(attacker.id, {
         x: clamp(p.x, -8.7, -0.3),
-        z: clamp(p.z, 0.3, 8.7),
+        z: clamp(9 - p.z, 0.3, 8.7),
       });
     },
   });
 
+  // 世界 z = 9 − 邏輯z 鏡像
   useLayoutEffect(() => {
-    groupRef.current?.position.set(posRef.current.x, 0, posRef.current.z);
+    groupRef.current?.position.set(posRef.current.x, 0, 9 - posRef.current.z);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -68,7 +70,7 @@ function AttackerUnit({ attacker, controlsRef }: AttackerUnitProps) {
     const dt = Math.min(rawDt, 0.1);
     // 拖曳中緊跟手指（tau 0.04s），放開後回到一般平滑（0.15s）
     const k = dampFactor(draggingRef.current ? DRAG_TAU : SMOOTH_TAU, dt);
-    tmpTarget.set(posRef.current.x, 0, posRef.current.z);
+    tmpTarget.set(posRef.current.x, 0, 9 - posRef.current.z);
     group.position.lerp(tmpTarget, k);
 
     // 持球光圈微脈動
