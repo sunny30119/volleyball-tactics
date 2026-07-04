@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude/swarm local artifacts
+.claude/
+.claude-flow/
