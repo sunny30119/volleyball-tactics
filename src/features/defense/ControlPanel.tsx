@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { useTacticsStore } from '../../store/useTacticsStore';
 import { ROLE_LABELS } from '../../logic/court';
+import { activeScenarios } from '../../logic/scenarios';
+import { PresetBar } from './PresetBar';
 
 // ============================================================
 // ControlPanel — 控制面板（全繁體中文、大字體、觸控友善 ≥44px）
@@ -29,11 +31,6 @@ const CAMERA_VIEWS = [
   ['coach', '教練視角'],
 ] as const;
 
-const SYSTEM_LABELS: Record<string, string> = {
-  perimeter: '邊線防守',
-  rotation: '輪轉防守',
-};
-
 export function ControlPanel() {
   const {
     system, setSystem,
@@ -42,11 +39,13 @@ export function ControlPanel() {
     labelMode, setLabelMode,
     cameraView, setCameraView,
     fanAngleOverride, setFanAngleOverride,
-    scenarios, saveCurrentAsScenario, removeScenario, loadScenario,
+    slots, saveCurrentAsScenario,
     importScenariosFromJSON,
     resetAll,
     defenseResult,
   } = useTacticsStore();
+
+  const savedCount = activeScenarios(slots).length;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -56,17 +55,21 @@ export function ControlPanel() {
     window.setTimeout(() => setNotice(null), 4000);
   }
 
-  // --- 情境儲存 ---
-  function handleSaveScenario() {
-    const name = window.prompt('請輸入情境名稱：');
-    if (!name || !name.trim()) return;
-    saveCurrentAsScenario(name.trim());
-    showNotice(`已儲存情境「${name.trim()}」`);
+  // --- 儲存到下一個空槽 ---
+  function handleSaveToNextSlot() {
+    const name = window.prompt('存入下一個空槽，請輸入名稱（可留空用預設）：', '');
+    if (name === null) return; // 取消
+    const idx = saveCurrentAsScenario(name);
+    if (idx === -1) {
+      showNotice('10 個站位槽都滿了，請先清除某個槽再存');
+    } else {
+      showNotice(`已存入站位 ${idx + 1}`);
+    }
   }
 
-  // --- 匯出 JSON ---
+  // --- 匯出 JSON（全部 10 槽）---
   function handleExport() {
-    const json = JSON.stringify(scenarios, null, 2);
+    const json = JSON.stringify(slots, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -74,7 +77,7 @@ export function ControlPanel() {
     a.download = `排球戰術情境-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showNotice(`已匯出 ${scenarios.length} 筆情境`);
+    showNotice(`已匯出全部 10 槽（${savedCount} 筆已存）`);
   }
 
   // --- 匯入 JSON ---
@@ -234,43 +237,18 @@ export function ControlPanel() {
         )}
       </section>
 
-      {/* 7. 佔位微調 + 儲存為情境 */}
+      {/* 7. 佔位微調 + 存入下一個空槽 */}
       <section style={styles.section}>
         <label style={styles.label}>佔位微調</label>
-        <p style={styles.hint}>可直接拖曳我方球員微調佔位</p>
-        <button style={styles.btnSave} onClick={handleSaveScenario}>
-          儲存為情境
+        <p style={styles.hint}>可直接拖曳我方球員微調佔位，再存入預設站位槽</p>
+        <button style={styles.btnSave} onClick={handleSaveToNextSlot}>
+          存入下一個空槽
         </button>
       </section>
 
-      {/* 8. 情境清單 */}
+      {/* 8. 10 組預設站位（PresetBar） */}
       <section style={styles.section}>
-        <label style={styles.label}>已儲存情境（{scenarios.length}）</label>
-        {scenarios.length === 0 && <p style={styles.hint}>尚無儲存的情境</p>}
-        {scenarios.map(s => (
-          <div key={s.id} style={styles.scenarioRow}>
-            <div style={styles.scenarioInfo}>
-              <span style={styles.scenarioName}>{s.name}</span>
-              <span style={styles.scenarioSystem}>{SYSTEM_LABELS[s.system] ?? s.system}</span>
-            </div>
-            <div style={styles.scenarioBtns}>
-              <button style={styles.btnSmall} onClick={() => loadScenario(s.id)}>
-                載入
-              </button>
-              <button
-                style={styles.btnSmallDanger}
-                onClick={() => {
-                  if (window.confirm(`確定刪除情境「${s.name}」？`)) {
-                    removeScenario(s.id);
-                    showNotice(`已刪除情境「${s.name}」`);
-                  }
-                }}
-              >
-                刪除
-              </button>
-            </div>
-          </div>
-        ))}
+        <PresetBar />
       </section>
 
       {/* 9. 匯出 / 匯入 */}

@@ -13,9 +13,12 @@ import { computeDefense, computeManualOverlays, computeScenarioZones } from '../
 import {
   loadScenarios,
   saveScenarios,
-  upsertScenario,
-  deleteScenario,
   importScenarios,
+  activeScenarios,
+  firstEmptySlot,
+  setSlot,
+  SLOT_COUNT,
+  type ScenarioSlots,
 } from '../logic/scenarios';
 
 // ============================================================
@@ -42,8 +45,8 @@ interface TacticsState {
   // --- 手動佔位覆蓋（我方球員隨時可拖曳）---
   editOverridePositions: Record<number, Vec2>; // 教練手動拖曳後的球員覆蓋座標
 
-  // --- 情境 ---
-  scenarios: CustomScenario[];
+  // --- 情境（固定 10 槽）---
+  slots: ScenarioSlots;
 
   // --- 計算結果（衍生狀態，由 recompute 更新）---
   defenseResult: DefenseResult | null;
@@ -88,16 +91,22 @@ interface TacticsState {
   /** 清除所有編輯覆蓋 */
   clearEditOverrides: () => void;
 
-  /** 儲存目前狀態為自訂情境 */
-  saveCurrentAsScenario: (name: string) => void;
+  /** 把當前佔位存入指定槽（0–9）；沿用 saveCurrentAsScenario 的資料收集邏輯 */
+  saveScenarioToSlot: (index: number, name?: string) => void;
 
-  /** 刪除情境 */
-  removeScenario: (id: string) => void;
+  /** 把當前佔位存入下一個空槽；全滿回傳 -1，成功回傳槽索引 */
+  saveCurrentAsScenario: (name?: string) => number;
 
-  /** 載入情境：攻擊點、體系回到儲存時狀態並重算 */
-  loadScenario: (id: string) => void;
+  /** 清除指定槽（變回空槽） */
+  clearSlot: (index: number) => void;
 
-  /** 從 JSON 字串匯入情境，回傳結果供 UI 提示 */
+  /** 重新命名指定槽的情境 */
+  renameSlot: (index: number, name: string) => void;
+
+  /** 載入指定槽的情境：攻擊點、體系回到儲存時狀態並重算 */
+  loadSlot: (index: number) => void;
+
+  /** 從 JSON 字串匯入情境（相容遷移），回傳結果供 UI 提示 */
   importScenariosFromJSON: (json: string) => { ok: boolean; count: number; error?: string };
 
   /** 重置回預設狀態（不刪除已存情境） */
@@ -144,7 +153,7 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
 
   editOverridePositions: {},
 
-  scenarios: loadScenarios(),
+  slots: loadScenarios(),
   defenseResult: null,
 
   // --- Actions ---
@@ -235,8 +244,9 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
     get().recompute();
   },
 
-  saveCurrentAsScenario(name) {
+  saveScenarioToSlot(index, name) {
     const state = get();
+    if (index < 0 || index >= SLOT_COUNT) return;
     const activeAttacker = getActiveAttacker(state.attackers, state.activeAttackerId);
     if (!state.defenseResult) return;
 
@@ -248,33 +258,56 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
     // zones 依覆蓋後的佔位重算，確保與球員位置一致
     const zones = computeScenarioZones(activeAttacker.pos, players);
 
+    // 沿用既有槽名稱（覆蓋時）；否則用傳入名稱或預設「站位N」
+    const existing = state.slots[index];
+    const finalName = name?.trim() || existing?.name || `站位${index + 1}`;
+
     const scenario: CustomScenario = {
-      id: `scenario-${Date.now()}`,
-      name,
+      id: existing?.id ?? `scenario-${Date.now()}`,
+      name: finalName,
       attackPos: activeAttacker.pos,
       system: state.system,
       players,
       zones,
-      createdAt: Date.now(),
+      createdAt: existing?.createdAt ?? Date.now(),
     };
 
-    const updated = upsertScenario(state.scenarios, scenario);
+    const updated = setSlot(state.slots, index, scenario);
     saveScenarios(updated);
-    set({ scenarios: updated });
+    set({ slots: updated });
     get().recompute();
   },
 
-  removeScenario(id) {
+  saveCurrentAsScenario(name) {
     const state = get();
-    const updated = deleteScenario(state.scenarios, id);
+    const idx = firstEmptySlot(state.slots);
+    if (idx === -1) return -1; // 全滿
+    get().saveScenarioToSlot(idx, name);
+    return idx;
+  },
+
+  clearSlot(index) {
+    const state = get();
+    const updated = setSlot(state.slots, index, null);
     saveScenarios(updated);
-    set({ scenarios: updated });
+    set({ slots: updated });
     get().recompute();
   },
 
-  loadScenario(id) {
+  renameSlot(index, name) {
     const state = get();
-    const scenario = state.scenarios.find(s => s.id === id);
+    const existing = state.slots[index];
+    if (!existing) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const updated = setSlot(state.slots, index, { ...existing, name: trimmed });
+    saveScenarios(updated);
+    set({ slots: updated });
+  },
+
+  loadSlot(index) {
+    const state = get();
+    const scenario = state.slots[index];
     if (!scenario) return;
     // 攻擊點回到儲存時位置（recompute 時距離為 0 → IDW 完全採用該情境佔位）
     set({
@@ -290,7 +323,7 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
   importScenariosFromJSON(json) {
     const result = importScenarios(json);
     if (result.ok) {
-      set({ scenarios: loadScenarios() });
+      set({ slots: result.slots ?? loadScenarios() });
       get().recompute();
     }
     return result;
@@ -316,7 +349,8 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
     const state = get();
     const activeAttacker = getActiveAttacker(state.attackers, state.activeAttackerId);
     const opts = buildOptions(state);
-    const base = computeDefense(activeAttacker.pos, opts, state.scenarios);
+    // 只把「非空槽」的情境傳給 computeDefense（維持原本內插行為不變）
+    const base = computeDefense(activeAttacker.pos, opts, activeScenarios(state.slots));
 
     const overrides = state.editOverridePositions;
     if (Object.keys(overrides).length === 0) {
