@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useTacticsStore } from '../../../store/useTacticsStore';
 import { ROLE_LABELS } from '../../../logic/court';
-import type { PlayerState, Vec2 } from '../../../types';
+import type { PlayerState } from '../../../types';
 import {
   bodyGeometry,
   headGeometry,
@@ -11,8 +11,6 @@ import {
   hitboxGeometry,
   hitboxMaterial,
   myPlayerMaterial,
-  editRingGeometry,
-  editRingMaterial,
 } from './assets';
 import { clamp, dampFactor, useGroundDrag } from './utils';
 import type { ControlsRef } from './utils';
@@ -20,10 +18,11 @@ import { PlayerLabel } from './PlayerLabel';
 
 // ============================================================
 // MyPlayers — 我方六名球員
-// - 位置來自 defenseResult（editMode 覆蓋座標優先）
+// - 位置來自 defenseResult（recompute 已套用手動覆蓋座標）
 // - useFrame 指數平滑移動（時間常數 0.15s），不瞬移
 // - 攔網球員：雙臂上舉方塊表示攔網姿態
-// - editMode 時可拖曳（限我方半場），寫入 editOverridePositions
+// - 隨時可拖曳（限我方半場），寫入 editOverridePositions
+//   → store 即時重算 zones，責任區塊跟著變形
 // ============================================================
 
 const SMOOTH_TAU = 0.15;
@@ -32,16 +31,14 @@ const tmpTarget = new THREE.Vector3();
 
 interface MyPlayerUnitProps {
   player: PlayerState;
-  displayPos: Vec2;
   label: string;
-  editMode: boolean;
   controlsRef: ControlsRef;
 }
 
-function MyPlayerUnit({ player, displayPos, label, editMode, controlsRef }: MyPlayerUnitProps) {
+function MyPlayerUnit({ player, label, controlsRef }: MyPlayerUnitProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const posRef = useRef(displayPos);
-  posRef.current = displayPos;
+  const posRef = useRef(player.pos);
+  posRef.current = player.pos;
 
   const { onPointerDown, draggingRef } = useGroundDrag({
     controlsRef,
@@ -69,7 +66,7 @@ function MyPlayerUnit({ player, displayPos, label, editMode, controlsRef }: MyPl
   });
 
   return (
-    <group ref={groupRef} {...(editMode ? { onPointerDown } : {})}>
+    <group ref={groupRef} onPointerDown={onPointerDown}>
       {/* 身體 + 頭 */}
       <mesh geometry={bodyGeometry} material={myPlayerMaterial} position={[0, 0.6, 0]} />
       <mesh geometry={headGeometry} material={myPlayerMaterial} position={[0, 1.42, 0]} />
@@ -82,19 +79,8 @@ function MyPlayerUnit({ player, displayPos, label, editMode, controlsRef }: MyPl
         </>
       )}
 
-      {/* 編輯模式提示圈 + 大判定範圍 */}
-      {editMode && (
-        <>
-          <mesh
-            geometry={editRingGeometry}
-            material={editRingMaterial}
-            rotation={[-Math.PI / 2, 0, 0]}
-            position={[0, 0.06, 0]}
-            raycast={() => null}
-          />
-          <mesh geometry={hitboxGeometry} material={hitboxMaterial} position={[0, 1.2, 0]} />
-        </>
-      )}
+      {/* 大判定範圍（平板手指友善） */}
+      <mesh geometry={hitboxGeometry} material={hitboxMaterial} position={[0, 1.2, 0]} />
 
       <PlayerLabel text={label} y={player.isBlocking ? 2.55 : 2.15} />
     </group>
@@ -104,8 +90,6 @@ function MyPlayerUnit({ player, displayPos, label, editMode, controlsRef }: MyPl
 export function MyPlayers({ controlsRef }: { controlsRef: ControlsRef }) {
   const players = useTacticsStore(s => s.defenseResult?.players ?? null);
   const labelMode = useTacticsStore(s => s.labelMode);
-  const editMode = useTacticsStore(s => s.editMode);
-  const overrides = useTacticsStore(s => s.editOverridePositions);
 
   if (!players) return null;
 
@@ -115,9 +99,7 @@ export function MyPlayers({ controlsRef }: { controlsRef: ControlsRef }) {
         <MyPlayerUnit
           key={player.id}
           player={player}
-          displayPos={overrides[player.id] ?? player.pos}
           label={labelMode === 'number' ? String(player.id) : (ROLE_LABELS[player.role] ?? player.role)}
-          editMode={editMode}
           controlsRef={controlsRef}
         />
       ))}

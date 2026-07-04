@@ -523,16 +523,26 @@ function buildAttackFan(
 // ----- 情境快照輔助 ------------------------------------------
 
 /**
- * 為「儲存為情境」計算指定球員佔位下的責任區塊。
- * （編輯模式下球員被手動移動後，zones 需重算才會與佔位一致）
+ * 依指定球員佔位重算責任區塊與攔網影子。
+ * 用途：
+ * - 教練手動拖曳球員後，store.recompute 需用覆蓋後的佔位即時重算 zones
+ * - 「儲存為情境」時 zones 需與最終佔位一致
  */
+export function computeManualOverlays(
+  attackPos: Vec2,
+  players: PlayerState[],
+): { zones: ZonePolygon[]; blockShadow: Vec2[] } {
+  const blockers = new Set(players.filter(p => p.isBlocking).map(p => p.id));
+  const shadow = buildBlockShadow(attackPos, blockers, players);
+  return { zones: buildZones(players, shadow), blockShadow: shadow };
+}
+
+/** 為「儲存為情境」計算指定球員佔位下的責任區塊 */
 export function computeScenarioZones(
   attackPos: Vec2,
   players: PlayerState[],
 ): ZonePolygon[] {
-  const blockers = new Set(players.filter(p => p.isBlocking).map(p => p.id));
-  const shadow = buildBlockShadow(attackPos, blockers, players);
-  return buildZones(players, shadow);
+  return computeManualOverlays(attackPos, players).zones;
 }
 
 // ============================================================
@@ -588,18 +598,23 @@ export function computeDefense(
   // 教練指定：自由球員替換後排攔中（6 號位）
   const liberoId = 6;
   const sixPos = interpolatePresets(attackPos, opts, blockers, blockerZPositions);
-  // 教練指定：1、5 號位有身高優勢，站責任區塊偏前（深球可跳起提前攔截）
-  // 前移 1.2m，但不淺於 x=5.0；用 max/min 組合保持連續不跳動
+  // 教練指定（2026-07-04）：1、5 號位有身高優勢，防守佔位前移到離網約 4m
+  // （＝攻擊線後 1m）；非攔網時 x 直接夾到不深於 4.0（連續、不跳動），z 不變
   for (const idx of [0, 4]) {
     const id = idx + 1;
     if (!blockers.has(id)) {
       const p = sixPos[idx];
-      sixPos[idx] = { x: Math.max(p.x - 1.2, Math.min(p.x, 5.0)), z: p.z };
+      sixPos[idx] = { x: Math.min(p.x, 4.0), z: p.z };
     }
   }
   const rawPlayers = buildPlayers(sixPos, blockers, liberoId);
   const shadow = buildBlockShadow(attackPos, blockers, rawPlayers);
-  const players = shiftOutOfShadow(rawPlayers, shadow, axisDir);
+  // shiftOutOfShadow 可能沿扇形軸把球員推深，最後再夾一次確保 1、5 號位 x ≤ 4.0
+  const players = shiftOutOfShadow(rawPlayers, shadow, axisDir).map(p =>
+    (p.id === 1 || p.id === 5) && !p.isBlocking && p.pos.x > 4.0
+      ? { ...p, pos: { x: 4.0, z: p.pos.z } }
+      : p,
+  );
   const zones = buildZones(players, shadow);
 
   return { players, zones, blockShadow: shadow, attackFan };

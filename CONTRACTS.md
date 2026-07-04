@@ -153,6 +153,11 @@ export function computeDefense(
 ### rotation（輪轉防守）
 - 後排球員根據攻擊方向順時針或逆時針輪轉 1–2 公尺
 
+### 1、5 號位前壓（教練 2026-07-04 指定，兩套體系共用）
+- 1、5 號位有身高優勢，防守佔位前移到**離網約 4m**（＝攻擊線後 1m）
+- 非攔網時 x 直接夾到不深於 4.0：`x' = min(x, 4.0)`（連續、不跳動），z 不變
+- `shiftOutOfShadow` 後再夾一次，確保任意攻擊點下 1、5 號位 x ≤ 4.0
+
 ---
 
 ## 3D 場景規格（`src/features/defense/Scene3D.tsx`）
@@ -182,6 +187,7 @@ export function computeDefense(
 - Pointer Events（`onPointerDown`, `onPointerMove`, `onPointerUp`）
 - 攻擊手拖曳範圍限制：`x ∈ [-9, -0.1]`（對方半場），`z ∈ [0, 9]`
 - 拖曳中每 frame 呼叫 `store.moveAttacker(id, pos)`
+- 我方球員**隨時可拖曳**（無編輯模式開關），限我方半場，寫入 `editOverridePositions` → 責任區塊即時重算
 
 ### 快速視角（`CameraView`）
 
@@ -216,7 +222,7 @@ export function computeDefense(
 ### 狀態欄位
 
 ```ts
-attackers: Attacker[]            // 攻擊手清單（預設3個）
+attackers: Attacker[]            // 攻擊手清單（預設 1 名，教練 2026-07-04 指定）
 activeAttackerId: string          // 目前拖曳的攻擊手 id
 system: DefenseSystem             // 防守體系
 middleBlockMode: 'single'|'double'
@@ -224,15 +230,16 @@ fanAngleOverride: number | null
 netHeight: number
 labelMode: LabelMode
 cameraView: CameraView
-editMode: boolean                 // 教練手動調整模式
-editOverridePositions: Record<number, Vec2>  // 編輯模式下球員座標覆蓋
+editOverridePositions: Record<number, Vec2>  // 教練手動拖曳的球員座標覆蓋（隨時可拖曳，無編輯模式開關）
 scenarios: CustomScenario[]
-defenseResult: DefenseResult | null  // 由 recompute() 更新
+defenseResult: DefenseResult | null  // 由 recompute() 更新（已套用覆蓋座標並重算 zones/blockShadow）
 ```
 
 ### 重要約定
 - `recompute()` 在每次影響防守結果的狀態變更後立即呼叫
 - `defenseResult` 是衍生狀態，不應直接 `set`，只能透過 `recompute()` 更新
+- `recompute()` 若有 `editOverridePositions`：套用覆蓋座標後用 `computeManualOverlays` 重算 zones 與 blockShadow
+- 拖曳攻擊手（`moveAttacker`）會清除所有手動覆蓋（攻擊點變了回到系統計算佔位）
 - 情境變更後同步呼叫 `saveScenarios()` 持久化到 localStorage
 
 ---

@@ -10,11 +10,10 @@ import { ROLE_LABELS } from '../../logic/court';
 //   4. 網高選擇
 //   5. 球員標籤模式（號位/角色）
 //   6. 攻擊扇形角度（自動 / 手動滑桿 40–120°）
-//   7. 編輯模式 + 儲存為情境
+//   7. 佔位微調（隨時可拖曳我方球員）+ 儲存為情境
 //   8. 情境清單（載入 / 刪除）
 //   9. 匯出 / 匯入 JSON
 //  10. 重置
-//  11. 攻擊手管理（新增 / 移除）
 // ============================================================
 
 const NET_HEIGHTS = [
@@ -43,10 +42,8 @@ export function ControlPanel() {
     labelMode, setLabelMode,
     cameraView, setCameraView,
     fanAngleOverride, setFanAngleOverride,
-    editMode, setEditMode,
     scenarios, saveCurrentAsScenario, removeScenario, loadScenario,
     importScenariosFromJSON,
-    attackers, activeAttackerId, addAttacker, removeAttacker,
     resetAll,
     defenseResult,
   } = useTacticsStore();
@@ -237,53 +234,13 @@ export function ControlPanel() {
         )}
       </section>
 
-      {/* 11. 攻擊手管理 */}
+      {/* 7. 佔位微調 + 儲存為情境 */}
       <section style={styles.section}>
-        <label style={styles.label}>攻擊手（點場上球員切換持球）</label>
-        <div style={styles.btnGroup}>
-          {attackers.map((a, i) => (
-            <div key={a.id} style={styles.attackerRow}>
-              <span style={a.id === activeAttackerId ? styles.attackerActive : styles.attackerName}>
-                {a.id === activeAttackerId ? '● ' : ''}攻擊手 {i + 1}
-              </span>
-              <button
-                style={attackers.length <= 1 ? styles.btnSmallDisabled : styles.btnSmall}
-                disabled={attackers.length <= 1}
-                onClick={() => removeAttacker(a.id)}
-              >
-                移除
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          style={attackers.length >= 3 ? styles.btnDisabled : styles.btn}
-          disabled={attackers.length >= 3}
-          onClick={() => addAttacker()}
-        >
-          ＋ 新增攻擊手（最多 3 名）
+        <label style={styles.label}>佔位微調</label>
+        <p style={styles.hint}>可直接拖曳我方球員微調佔位</p>
+        <button style={styles.btnSave} onClick={handleSaveScenario}>
+          儲存為情境
         </button>
-      </section>
-
-      {/* 7. 編輯模式 */}
-      <section style={styles.section}>
-        <label style={styles.label}>教練編輯模式</label>
-        <button
-          style={editMode ? styles.btnActive : styles.btn}
-          onClick={() => setEditMode(!editMode)}
-        >
-          {editMode ? '編輯模式：開啟' : '編輯模式：關閉'}
-        </button>
-        {editMode && (
-          <>
-            <p style={styles.hint}>
-              可直接在 3D 場地拖曳我方球員調整佔位，調整完按下方按鈕儲存。
-            </p>
-            <button style={styles.btnSave} onClick={handleSaveScenario}>
-              儲存為情境
-            </button>
-          </>
-        )}
       </section>
 
       {/* 8. 情境清單 */}

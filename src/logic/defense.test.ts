@@ -71,6 +71,35 @@ describe('computeDefense — 攔網配置', () => {
   });
 });
 
+describe('computeDefense — 1、5 號位前壓（教練 2026-07-04：離網約 4m）', () => {
+  it('任意前排攻擊點下，非攔網的 1、5 號位 pos.x ≤ 4.0（兩套體系）', () => {
+    for (const system of ['perimeter', 'rotation'] as const) {
+      const opts: DefenseOptions = { ...BASE_OPTS, system };
+      for (let z = 0.5; z <= 8.5; z += 0.25) {
+        const result = computeDefense({ x: -1, z }, opts, NO_SCENARIOS);
+        for (const id of [1, 5]) {
+          const p = result.players.find(pp => pp.id === id)!;
+          if (!p.isBlocking) {
+            expect(p.pos.x, `system=${system} z=${z} 球員${id}`).toBeLessThanOrEqual(4.0);
+          }
+        }
+      }
+    }
+  });
+
+  it('後排攻擊點下，非攔網的 1、5 號位 pos.x ≤ 4.0', () => {
+    for (let z = 0.5; z <= 8.5; z += 0.5) {
+      const result = computeDefense({ x: -6, z }, BASE_OPTS, NO_SCENARIOS);
+      for (const id of [1, 5]) {
+        const p = result.players.find(pp => pp.id === id)!;
+        if (!p.isBlocking) {
+          expect(p.pos.x, `z=${z} 球員${id}`).toBeLessThanOrEqual(4.0);
+        }
+      }
+    }
+  });
+});
+
 describe('computeDefense — 攻擊扇形', () => {
   it('後排 6 號位攻擊（中間）扇形角度 >= 對方 4 號位邊線攻擊扇形角度', () => {
     const backCenter = computeDefense({ x: -6, z: 4.5 }, BASE_OPTS, NO_SCENARIOS);

@@ -9,7 +9,7 @@ import type {
   LabelMode,
   Vec2,
 } from '../types';
-import { computeDefense, computeScenarioZones } from '../logic/defense';
+import { computeDefense, computeManualOverlays, computeScenarioZones } from '../logic/defense';
 import {
   loadScenarios,
   saveScenarios,
@@ -39,9 +39,8 @@ interface TacticsState {
   /** 視角切換計數器：重按同一顆視角鈕也要重新觸發相機過渡動畫（3D 場景用） */
   cameraViewNonce: number;
 
-  // --- 編輯模式 ---
-  editMode: boolean;
-  editOverridePositions: Record<number, Vec2>; // 編輯模式下球員覆蓋座標
+  // --- 手動佔位覆蓋（我方球員隨時可拖曳）---
+  editOverridePositions: Record<number, Vec2>; // 教練手動拖曳後的球員覆蓋座標
 
   // --- 情境 ---
   scenarios: CustomScenario[];
@@ -83,10 +82,7 @@ interface TacticsState {
   /** 切換相機視角 */
   setCameraView: (view: CameraView) => void;
 
-  /** 進入 / 離開編輯模式 */
-  setEditMode: (enabled: boolean) => void;
-
-  /** 編輯模式下覆蓋某球員座標 */
+  /** 手動拖曳覆蓋某球員座標（zones 即時重算） */
   setEditOverridePosition: (playerId: number, pos: Vec2) => void;
 
   /** 清除所有編輯覆蓋 */
@@ -111,13 +107,11 @@ interface TacticsState {
   recompute: () => void;
 }
 
-// 預設攻擊手（對方半場，x ∈ [-9, 0]）
+// 預設攻擊手（對方半場，x ∈ [-9, 0]）：教練指定只留 1 名（2026-07-04）
 const MAX_ATTACKERS = 3;
 function defaultAttackers(): Attacker[] {
   return [
-    { id: 'atk-1', pos: { x: -2.0, z: 2.0 }, isActive: true },  // 對方4號位
-    { id: 'atk-2', pos: { x: -2.0, z: 7.0 }, isActive: false }, // 對方2號位
-    { id: 'atk-3', pos: { x: -2.0, z: 4.5 }, isActive: false }, // 對方3號位
+    { id: 'atk-1', pos: { x: -2.0, z: 7.0 }, isActive: true }, // 對方 4 號位區域
   ];
 }
 
@@ -148,7 +142,6 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
   cameraView: 'coach',
   cameraViewNonce: 0,
 
-  editMode: false,
   editOverridePositions: {},
 
   scenarios: loadScenarios(),
@@ -157,8 +150,10 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
   // --- Actions ---
 
   moveAttacker(id, pos) {
+    // 攻擊點變了 → 清除所有手動覆蓋，回到系統計算的佔位（教練再手動微調）
     set(state => ({
       attackers: state.attackers.map(a => (a.id === id ? { ...a, pos } : a)),
+      editOverridePositions: {},
     }));
     get().recompute();
   },
@@ -227,19 +222,17 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
     set(state => ({ cameraView: view, cameraViewNonce: state.cameraViewNonce + 1 }));
   },
 
-  setEditMode(enabled) {
-    set({ editMode: enabled });
-    if (!enabled) get().clearEditOverrides();
-  },
-
   setEditOverridePosition(playerId, pos) {
     set(state => ({
       editOverridePositions: { ...state.editOverridePositions, [playerId]: pos },
     }));
+    // zones / blockShadow 即時跟著覆蓋後的佔位重算
+    get().recompute();
   },
 
   clearEditOverrides() {
     set({ editOverridePositions: {} });
+    get().recompute();
   },
 
   saveCurrentAsScenario(name) {
@@ -312,7 +305,6 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
       fanAngleOverride: null,
       netHeight: 2.43,
       labelMode: 'number',
-      editMode: false,
       editOverridePositions: {},
     });
     // 視角回到預設教練視角（nonce 遞增觸發過渡動畫）
@@ -324,8 +316,21 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
     const state = get();
     const activeAttacker = getActiveAttacker(state.attackers, state.activeAttackerId);
     const opts = buildOptions(state);
-    const result = computeDefense(activeAttacker.pos, opts, state.scenarios);
-    set({ defenseResult: result });
+    const base = computeDefense(activeAttacker.pos, opts, state.scenarios);
+
+    const overrides = state.editOverridePositions;
+    if (Object.keys(overrides).length === 0) {
+      set({ defenseResult: base });
+      return;
+    }
+
+    // 套用手動覆蓋座標，zones / blockShadow 依覆蓋後的佔位即時重算
+    const players = base.players.map(p => {
+      const o = overrides[p.id];
+      return o ? { ...p, pos: o } : p;
+    });
+    const { zones, blockShadow } = computeManualOverlays(activeAttacker.pos, players);
+    set({ defenseResult: { ...base, players, zones, blockShadow } });
   },
 }));
 
