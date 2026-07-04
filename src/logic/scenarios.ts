@@ -3,7 +3,7 @@ import type { CustomScenario } from '../types';
 const STORAGE_KEY = 'volleyball-tactics-scenarios';
 
 // ============================================================
-// 自訂情境的儲存 / 讀取 / 內插邏輯
+// 自訂情境 CRUD + localStorage 持久化
 // ============================================================
 
 /** 從 localStorage 載入全部情境 */
@@ -11,7 +11,9 @@ export function loadScenarios(): CustomScenario[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as CustomScenario[];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as CustomScenario[];
   } catch {
     return [];
   }
@@ -47,17 +49,48 @@ export function deleteScenario(
 }
 
 /** 匯出情境為 JSON 字串 */
+export function exportScenarios(): string {
+  return JSON.stringify(loadScenarios(), null, 2);
+}
+
+/** 從 JSON 字串匯入情境，回傳 { ok, count, error } */
+export function importScenarios(json: string): {
+  ok: boolean;
+  count: number;
+  error?: string;
+} {
+  try {
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed)) {
+      return { ok: false, count: 0, error: '格式錯誤：頂層必須是陣列' };
+    }
+    // 驗證每筆情境有必要欄位
+    for (const item of parsed) {
+      if (
+        typeof item.id !== 'string' ||
+        typeof item.name !== 'string' ||
+        typeof item.system !== 'string' ||
+        !item.attackPos ||
+        !Array.isArray(item.players) ||
+        !Array.isArray(item.zones)
+      ) {
+        return { ok: false, count: 0, error: '情境資料格式不完整' };
+      }
+    }
+    saveScenarios(parsed as CustomScenario[]);
+    return { ok: true, count: parsed.length };
+  } catch (e) {
+    return { ok: false, count: 0, error: `JSON 解析失敗：${String(e)}` };
+  }
+}
+
+// 保留相容舊介面的函式名稱（store 可能已使用）
+export { loadScenarios as getSavedScenarios };
 export function exportScenariosJSON(scenarios: CustomScenario[]): string {
   return JSON.stringify(scenarios, null, 2);
 }
-
-/** 從 JSON 字串匯入情境（覆蓋全部） */
 export function importScenariosJSON(json: string): CustomScenario[] {
-  try {
-    const parsed = JSON.parse(json);
-    if (!Array.isArray(parsed)) throw new Error('格式錯誤');
-    return parsed as CustomScenario[];
-  } catch {
-    throw new Error('JSON 格式不正確，無法匯入情境');
-  }
+  const result = importScenarios(json);
+  if (!result.ok) throw new Error(result.error);
+  return loadScenarios();
 }

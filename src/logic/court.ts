@@ -46,7 +46,7 @@ export const POSITION_LABELS: Record<number, string> = {
 
 // 角色中文標籤
 export const ROLE_LABELS: Record<string, string> = {
-  S:   '舉',
+  S:   '舉球',
   OH1: '主攻1',
   OH2: '主攻2',
   MB1: '攔中1',
