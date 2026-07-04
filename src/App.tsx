@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DefenseTab } from './features/defense/DefenseTab';
+import { ReceiveTab } from './features/receive/ReceiveTab';
 
 // ============================================================
 // App — 主分頁架構
@@ -52,7 +53,7 @@ export default function App() {
       {/* 分頁內容 */}
       <main style={styles.main}>
         {activeTab === 'defense' && <DefenseTab />}
-        {activeTab === 'receive' && <PlaceholderTab label="接發球站位" />}
+        {activeTab === 'receive' && <ReceiveTab />}
         {activeTab === 'setting' && <PlaceholderTab label="舉球參數" />}
       </main>
     </div>
