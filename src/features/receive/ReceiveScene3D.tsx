@@ -33,7 +33,7 @@ export function ReceiveScene3D() {
       <Court />
       <ReceiveNet />
       <ReceiveOverlays />
-      <ReceivePlayers />
+      <ReceivePlayers controlsRef={controlsRef} />
       <ReceiveCameraRig controlsRef={controlsRef} />
     </Canvas>
   );

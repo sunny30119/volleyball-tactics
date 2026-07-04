@@ -2,7 +2,12 @@ import * as THREE from 'three';
 import { useEffect, useMemo } from 'react';
 import { Line } from '@react-three/drei';
 import { useReceiveStore } from '../../../store/useReceiveStore';
-import { getLegalZones, getSetterPath, type LegalZone } from '../../../logic/receive';
+import {
+  getLegalZones,
+  getSetterPath,
+  getSetterPosition,
+  type LegalZone,
+} from '../../../logic/receive';
 import { COLOR_SETTER } from './assets';
 import {
   legalZoneFillMaterial,
@@ -69,7 +74,15 @@ function LegalZoneBox({ zone }: { zone: LegalZone }) {
 
 function SetterPath() {
   const rotation = useReceiveStore(s => s.rotation);
-  const path = useMemo(() => getSetterPath(rotation), [rotation]);
+  const overrides = useReceiveStore(s => s.overridePositions);
+  const path = useMemo(() => {
+    const p = getSetterPath(rotation);
+    if (!p) return null;
+    // 若教練拖曳過舉球員，插上起點跟著實際位置走
+    const setterPos = getSetterPosition(rotation);
+    const o = overrides[setterPos];
+    return o ? { ...p, from: { ...o } } : p;
+  }, [rotation, overrides]);
 
   const points = useMemo<[number, number, number][] | null>(() => {
     if (!path) return null;

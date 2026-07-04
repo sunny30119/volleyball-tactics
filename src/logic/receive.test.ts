@@ -155,6 +155,85 @@ describe('重疊規則（前後排 + 左右）成立', () => {
   });
 });
 
+describe('攻擊組織優先佈局（教練 2026-07 更新）', () => {
+  it('舉球員 S 從不列入接發員', () => {
+    for (const r of ALL_ROTATIONS) {
+      const s = getReceiveFormation(r).find(x => x.role === 'S')!;
+      expect(s.isPasser, `R${r} S 不接發`).toBe(false);
+    }
+  });
+
+  it('前排攔中 MB 從不列入接發員，且貼網（x 極小）準備打快攻', () => {
+    for (const r of ALL_ROTATIONS) {
+      const mb = getReceiveFormation(r).find(
+        x => x.role === 'MB1' || x.role === 'MB2',
+      )!;
+      expect(mb.isPasser, `R${r} 前排MB不接發`).toBe(false);
+      expect(isFrontRow(mb.positionNo), `R${r} MB 在前排`).toBe(true);
+      // 貼網：x 接近網前中央的 0.8（夾制後仍極小）
+      expect(mb.pos.x, `R${r} MB 貼網`).toBeLessThanOrEqual(1.0);
+    }
+  });
+
+  it('S 在前排時直接站網前偏右舉球定位（≈x1.0,z6.0）', () => {
+    for (const r of ALL_ROTATIONS) {
+      if (!isFrontRow(getSetterPosition(r))) continue;
+      const s = getReceiveFormation(r).find(x => x.role === 'S')!;
+      expect(Math.abs(s.pos.x - 1.0), `R${r} S 前排 x`).toBeLessThanOrEqual(0.3);
+      expect(Math.abs(s.pos.z - 6.0), `R${r} S 前排 z`).toBeLessThanOrEqual(0.3);
+      expect(s.pos.x, `R${r} S 貼網`).toBeLessThan(2);
+    }
+  });
+
+  it('S 在後排時，其站位是合法框內最靠網前（x 貼合法框下界）', () => {
+    for (const r of ALL_ROTATIONS) {
+      const setterPos = getSetterPosition(r);
+      if (isFrontRow(setterPos)) continue;
+      const s = getReceiveFormation(r).find(x => x.role === 'S')!;
+      const zone = getLegalZones(r).find(z => z.positionNo === setterPos)!;
+      // 站位落在合法框內
+      expect(s.pos.x).toBeGreaterThanOrEqual(zone.min.x - 1e-9);
+      expect(s.pos.x).toBeLessThanOrEqual(zone.max.x + 1e-9);
+      // x 已貼近合法框最靠網那側（下界），使插上跑動最短
+      expect(s.pos.x - zone.min.x, `R${r} S 貼合法框下界`).toBeLessThanOrEqual(0.5);
+      // 明顯比預設後排底線（7.0）靠前
+      expect(s.pos.x, `R${r} S 已插前`).toBeLessThan(6.5);
+    }
+  });
+
+  it('三名接發員（OH1/OH2/L）承擔全部接發並展開於後場', () => {
+    for (const r of ALL_ROTATIONS) {
+      const formation = getReceiveFormation(r);
+      const passers = formation.filter(s => s.isPasser);
+      expect(passers).toHaveLength(3);
+      // 只有這三名接發員接發，S / MB / OP 皆讓開
+      const nonPasserRoles = formation
+        .filter(s => !s.isPasser)
+        .map(s => s.role)
+        .sort();
+      expect(nonPasserRoles.some(x => x === 'MB1' || x === 'MB2')).toBe(true);
+      expect(nonPasserRoles).toContain('S');
+      expect(nonPasserRoles).toContain('OP');
+      // 接發員展開涵蓋一定 z 寬度（左右分擔）
+      const zs = passers.map(p => p.pos.z);
+      const spread = Math.max(...zs) - Math.min(...zs);
+      expect(spread, `R${r} 接發展開寬度`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('舉對 OP 從不接發，且 x 依前後排讓開（前排貼網／後排靠後）', () => {
+    for (const r of ALL_ROTATIONS) {
+      const op = getReceiveFormation(r).find(x => x.role === 'OP')!;
+      expect(op.isPasser, `R${r} OP 不接發`).toBe(false);
+      if (isFrontRow(op.positionNo)) {
+        expect(op.pos.x, `R${r} OP 前排貼網`).toBeLessThanOrEqual(2);
+      } else {
+        expect(op.pos.x, `R${r} OP 後排靠後`).toBeGreaterThan(4.5);
+      }
+    }
+  });
+});
+
 describe('getSetterPath 舉球員插上路徑', () => {
   it('S 在前排回傳 null、後排回傳路徑', () => {
     for (const r of ALL_ROTATIONS) {

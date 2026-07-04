@@ -122,17 +122,31 @@ export function isSetterFront(rotation: Rotation): boolean {
 // ------------------------------------------------------------
 // 接發球站位座標
 //
-// 設計（教練確認）：
-//  - 3 人接發：OH1、OH2、L 三人成後場接發弧線。
-//    分左/中/右分擔，中間偏後那名接主要區。
-//  - 前排攔中（前排那名 MB）站網前攻擊準備位。
-//  - 舉對 OP：前排→網前右；後排→後排右（準備後排攻擊）。
-//  - 舉球員 S：前排→網前偏右舉球位；後排→合法接發站位（插上路徑另給）。
+// 設計原則（教練 2026-07 更新）：以「舉球員與前排攔中手能最快到達
+// 其攻擊組織站位」為第一原則重新佈局：
 //
-// 所有站位須符合重疊規則（見 getLegalZones）：
+//  - 舉球員 S：目標最短距離插上到「網前偏右的舉球定位」(≈x1.0,z6.0)。
+//     · S 在前排 → 直接站舉球定位（網前偏右，靠 2 號位），不接發、不擋路線。
+//     · S 在後排 → 站「符合重疊規則的合法站位中，最靠近網前舉球定位那一點」
+//       （靠右、盡量靠前的合法位置），使插上跑動最短；插上路徑 from 用此站位。
+//  - 前排攔中（前排那名 MB）：站網前中央附近 (≈x0.8,z4.5)，貼網不接發，
+//    方便立刻助跑打中間快攻。
+//  - 三名接發員（OH1、OH2、L）：承擔全部接發，佈成後場接發弧線；
+//    S 與前排 MB 讓開後，接發員把左/中/右涵蓋完整（中間偏後那名接主要區）。
+//  - 舉對 OP：站右側（前排→網前右準備右側/舉對攻擊；後排→後排右準備後排攻擊），
+//    不接發、不擋接發員。
+//
+// 所有站位仍須符合重疊規則（見 getLegalZones）：
 //   前後排：x(P1)>x(P2)、x(P6)>x(P3)、x(P5)>x(P4)
 //   前排左右：z(P4)<z(P3)<z(P2)
 //   後排左右：z(P5)<z(P6)<z(P1)
+//
+// 為同時滿足「角色功能位置」與「依號位的重疊規則」，作法是：
+//   1. 先給每個號位一個天然合序的基準 z（左→右遞增，前後排各自成序）。
+//   2. x 依角色功能決定（網前 / 後場 / 插上起點）。
+//   3. 最後對每一排的 z 做嚴格遞增夾制（保持 z 次序），
+//      對每組前後排 pair 做 x 夾制（保證前排 x < 後排 x），
+//      確保任何角色安排下重疊規則都成立、且每點落在自身合法框內。
 // ------------------------------------------------------------
 
 export interface ReceiveSpot {
@@ -142,76 +156,134 @@ export interface ReceiveSpot {
   isPasser: boolean;  // 是否為三名接發員之一
 }
 
-// 接發站位設計原則：
-//   重疊規則約束的是「號位」（固定場地槽位），不是角色。
-//   因此我方六人先各自有一個「依號位」的基準站位，天然滿足：
-//     前後排：x(P1)>x(P2)、x(P6)>x(P3)、x(P5)>x(P4)
-//     前排：z(P4)<z(P3)<z(P2)；後排：z(P5)<z(P6)<z(P1)
-//   再依角色微調 x（前排網前準備、後排接發弧線/準備位），
-//   但保持每一排的 z 相對次序不變，確保不違反重疊規則。
-//
+/** 我方半場站位邊界（發球瞬間合法範圍） */
+const COURT_MIN = 0.3;
+const COURT_MAX = 8.7;
+
+/** 網前偏右的舉球定位（右前 2 號位附近，插上目標） */
+const SETTER_TARGET: Vec2 = { x: 1.0, z: 6.0 };
+/** 前排攔中網前中央站位 */
+const MB_NET_CENTER: Vec2 = { x: 0.8, z: 4.5 };
+
 // 每個號位的基準 z（左→右遞增，前後排各自成序）：
 const BASE_Z: Record<PositionNo, number> = {
   4: 2.3, 3: 4.5, 2: 6.7, // 前排 左→右
   5: 2.3, 6: 4.5, 1: 6.7, // 後排 左→右
 };
 
+/** 前後排 pair：前排號位 → 對應後排號位（x 約束用） */
+const FRONT_TO_BACK: Record<PositionNo, PositionNo> = { 2: 1, 3: 6, 4: 5, 1: 2, 6: 3, 5: 4 };
+
+const isPasserRole = (role: Role) =>
+  role === 'OH1' || role === 'OH2' || role === 'L';
+
 /**
- * 取得該輪轉六人接發球站位座標。
- * z 由號位決定（滿足左右重疊規則），x 由角色功能決定
- * （前排靠網、後排靠後），並確保前後排 x 約束成立。
+ * 舉球員在後排時的合法接發站位（插上起點）。
+ * 取「盡量靠前」的後排合法點，使插上到網前舉球定位跑動最短。
+ * x 用 4.6（後排中能合法貼前的位置：仍須 > 前排 x，夾制階段保證），
+ * z 沿用該後排號位基準 z（維持後排 z 次序 P5<P6<P1）。
  */
-export function getReceiveFormation(rotation: Rotation): ReceiveSpot[] {
+function setterBackStandPos(positionNo: PositionNo): Vec2 {
+  return { x: 4.6, z: BASE_Z[positionNo] };
+}
+
+/**
+ * 取得該輪轉六人接發球站位座標（原始，尚未夾制）。
+ */
+function rawFormation(rotation: Rotation): ReceiveSpot[] {
   const lineup = getLineup(rotation);
   const setterPos = getSetterPosition(rotation);
   const setterFront = isFrontRow(setterPos);
 
-  const isPasserRole = (role: Role) =>
-    role === 'OH1' || role === 'OH2' || role === 'L';
-
-  const result: ReceiveSpot[] = lineup.map(entry => {
+  return lineup.map(entry => {
     const { positionNo, role } = entry;
     const front = isFrontRow(positionNo);
     const z = BASE_Z[positionNo];
-    let x: number;
+    let pos: Vec2;
 
     if (isPasserRole(role)) {
-      // 接發員：站接發弧線。前排接發員稍前（x≈5.4），後排接發員靠後（x≈6.6）。
-      x = front ? 5.4 : 6.6;
+      // 接發員：後場接發弧線。前排號位的接發員站中前場（讓身後的後排舉球員能貼前插上），
+      // 後排接發員靠後接主要區。
+      pos = { x: front ? 4.2 : 6.9, z };
     } else if (role === 'S') {
-      if (setterFront) {
-        x = 1.1; // 前排舉球位（靠網）
-      } else {
-        // 後排舉球員：合法接發站位（插上起點），x 靠後
-        x = 6.8;
-      }
+      // 舉球員：前排直接站舉球定位；後排站最靠網前的合法接發起點。
+      pos = setterFront ? { ...SETTER_TARGET } : setterBackStandPos(positionNo);
     } else if (role === 'MB1' || role === 'MB2') {
-      // 前排攔中（後排攔中已換 L）：網前攻擊準備位
-      x = 1.3;
+      // 前排攔中：網前中央（貼網打快攻）。z 用號位基準確保與其他前排合序。
+      pos = { x: MB_NET_CENTER.x, z };
     } else if (role === 'OP') {
-      // 舉對：前排靠網、後排靠後（準備後排攻擊）
-      x = front ? 1.3 : 6.8;
+      // 舉對：右側。前排靠網、後排靠後。
+      pos = { x: front ? 1.2 : 6.9, z };
     } else {
-      x = front ? 1.3 : 6.6;
+      pos = { x: front ? 1.3 : 6.6, z };
     }
-
-    const pos: Vec2 =
-      role === 'S' && !setterFront
-        ? setterBackStandPos(positionNo) // 後排舉球員用專屬插上起點座標
-        : { x, z };
 
     return { positionNo, role, pos, isPasser: isPasserRole(role) };
   });
-
-  return result;
 }
 
 /**
- * 舉球員後排合法接發站位（插上起點）。
- * x 靠後（7.0），z 沿用該後排號位的基準 z，確保後排 z 次序 P5<P6<P1 不被破壞。
+ * 對原始佈局做重疊規則夾制：
+ *  - 每一排 z 嚴格遞增（左→右保序）。
+ *  - 每組前後排 pair 保證前排 x 明顯小於後排 x（前排靠網）。
+ * 夾制量微小，不破壞角色功能位置的意圖。
  */
-function setterBackStandPos(positionNo: PositionNo): Vec2 {
-  return { x: 7.0, z: BASE_Z[positionNo] };
+export function getReceiveFormation(rotation: Rotation): ReceiveSpot[] {
+  const spots = rawFormation(rotation);
+  const byPos = new Map<PositionNo, ReceiveSpot>();
+  spots.forEach(s => byPos.set(s.positionNo, s));
+
+  const GAP_Z = 0.6;   // 同排相鄰 z 最小差
+  const GAP_X = 0.8;   // 前後排 x 最小差
+
+  // --- z 嚴格遞增（前排 P4<P3<P2、後排 P5<P6<P1）---
+  const enforceZ = (order: PositionNo[]) => {
+    for (let i = 1; i < order.length; i++) {
+      const prev = byPos.get(order[i - 1])!;
+      const cur = byPos.get(order[i])!;
+      if (cur.pos.z < prev.pos.z + GAP_Z) {
+        cur.pos = { ...cur.pos, z: prev.pos.z + GAP_Z };
+      }
+    }
+  };
+  enforceZ([4, 3, 2]);
+  enforceZ([5, 6, 1]);
+
+  // --- 前後排 x 約束：後排 x 至少比前排 x 多 GAP_X ---
+  for (const frontP of FRONT_ROW) {
+    const backP = FRONT_TO_BACK[frontP];
+    const f = byPos.get(frontP)!;
+    const b = byPos.get(backP)!;
+    if (b.pos.x < f.pos.x + GAP_X) {
+      b.pos = { ...b.pos, x: f.pos.x + GAP_X };
+    }
+  }
+
+  // --- 後排舉球員貼前：把 S 拉到「其前排搭檔之後 GAP_X」的最靠網合法點，
+  //     使插上到網前舉球定位跑動最短（尤其前排搭檔是貼網 MB 時能大幅前壓）---
+  const setterPos = getSetterPosition(rotation);
+  if (!isFrontRow(setterPos)) {
+    const s = byPos.get(setterPos)!;
+    // setterPos 是後排號位，用反查找其前排搭檔
+    const frontOfSetter = (Object.keys(FRONT_TO_BACK) as unknown as PositionNo[])
+      .map(k => Number(k) as PositionNo)
+      .find(fp => FRONT_TO_BACK[fp] === setterPos)!;
+    const f = byPos.get(frontOfSetter)!;
+    const forwardX = f.pos.x + GAP_X;
+    if (forwardX < s.pos.x) {
+      s.pos = { ...s.pos, x: forwardX };
+    }
+  }
+
+  // --- 夾回我方半場 ---
+  for (const s of spots) {
+    s.pos = {
+      x: Math.min(Math.max(s.pos.x, COURT_MIN), COURT_MAX),
+      z: Math.min(Math.max(s.pos.z, COURT_MIN), COURT_MAX),
+    };
+  }
+
+  return spots;
 }
 
 // ------------------------------------------------------------
@@ -223,9 +295,6 @@ export interface LegalZone {
   min: Vec2;
   max: Vec2;
 }
-
-const COURT_MIN = 0.3;
-const COURT_MAX = 8.7;
 
 /**
  * 每名球員發球瞬間的合法站位矩形。
@@ -309,19 +378,18 @@ export interface SetterPath {
   to: Vec2;
 }
 
-/** 網前 2-3 號位之間的插上目標（右前，舉球位） */
-const SETTER_TARGET: Vec2 = { x: 1.0, z: 6.0 };
-
 /**
  * 舉球員插上路徑：
- *   S 在後排 → 從其合法接發站位插上到網前 2-3 號位間（右前）。
- *   S 在前排 → null（前排站定舉球位，無需插上）。
+ *   S 在後排 → 從其實際接發站位（夾制後）插上到網前舉球定位（右前）。
+ *   S 在前排 → null（前排站定舉球定位，無需插上）。
  */
 export function getSetterPath(rotation: Rotation): SetterPath | null {
   const setterPos = getSetterPosition(rotation);
   if (isFrontRow(setterPos)) return null;
+  // from 用夾制後的實際站位，讓箭頭起點與球員一致
+  const spot = getReceiveFormation(rotation).find(s => s.positionNo === setterPos)!;
   return {
-    from: setterBackStandPos(setterPos),
+    from: { ...spot.pos },
     to: { ...SETTER_TARGET },
   };
 }

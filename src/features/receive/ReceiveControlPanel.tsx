@@ -9,6 +9,7 @@ import {
 } from '../../logic/receive';
 import { ROLE_LABELS } from '../../logic/court';
 import type { CameraView } from '../../types';
+import { ReceivePresetBar } from './ReceivePresetBar';
 
 // ============================================================
 // ReceiveControlPanel — 功能二控制面板（全繁中大字）
@@ -45,6 +46,8 @@ export function ReceiveControlPanel() {
   const toggleLegalZones = useReceiveStore(s => s.toggleLegalZones);
   const setCameraView = useReceiveStore(s => s.setCameraView);
   const reset = useReceiveStore(s => s.reset);
+  const clearOverrides = useReceiveStore(s => s.clearOverrides);
+  const overrideCount = useReceiveStore(s => Object.keys(s.overridePositions).length);
 
   const setterPos = getSetterPosition(rotation);
   const setterFront = isFrontRow(setterPos);
@@ -150,9 +153,22 @@ export function ReceiveControlPanel() {
         </div>
       </section>
 
+      {/* --- 10 組預設站位 + 拖曳儲存 --- */}
+      <section style={styles.section}>
+        <ReceivePresetBar />
+      </section>
+
       {/* --- 重置 --- */}
       <section style={styles.section}>
-        <button style={styles.resetBtn} onClick={reset}>重置</button>
+        <button
+          style={overrideCount > 0 ? styles.clearOverrideBtn : styles.clearOverrideBtnDim}
+          onClick={clearOverrides}
+          disabled={overrideCount === 0}
+          title="清除手動拖曳，回到系統計算佈局"
+        >
+          回到計算佈局{overrideCount > 0 ? `（已拖曳 ${overrideCount} 人）` : ''}
+        </button>
+        <button style={styles.resetBtn} onClick={reset}>重置（輪轉＋佈局＋視角）</button>
       </section>
     </div>
   );
@@ -345,5 +361,31 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#ef9a9a',
     cursor: 'pointer',
     touchAction: 'manipulation',
+  },
+  clearOverrideBtn: {
+    padding: '11px',
+    fontSize: '0.95rem',
+    fontWeight: 700,
+    fontFamily: 'inherit',
+    borderRadius: '8px',
+    border: '1px solid #3949ab',
+    background: '#152238',
+    color: '#90caf9',
+    cursor: 'pointer',
+    touchAction: 'manipulation',
+    marginBottom: '8px',
+  },
+  clearOverrideBtnDim: {
+    padding: '11px',
+    fontSize: '0.95rem',
+    fontWeight: 700,
+    fontFamily: 'inherit',
+    borderRadius: '8px',
+    border: '1px solid #26324d',
+    background: '#111a2b',
+    color: '#546080',
+    cursor: 'not-allowed',
+    touchAction: 'manipulation',
+    marginBottom: '8px',
   },
 };
