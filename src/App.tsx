@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DefenseTab } from './features/defense/DefenseTab';
 import { ReceiveTab } from './features/receive/ReceiveTab';
+import { exportAllJSON, importAllJSON, backupFileName } from './logic/backup';
+import { useTacticsStore } from './store/useTacticsStore';
+import { useReceiveStore } from './store/useReceiveStore';
 
 // ============================================================
 // App — 主分頁架構
@@ -29,6 +32,73 @@ function PlaceholderTab({ label }: { label: string }) {
   );
 }
 
+/** 全域備份：一鍵匯出/匯入「防守 10 槽 + 接發 10 槽」。 */
+function GlobalBackup() {
+  const reloadDefense = useTacticsStore(s => s.reloadSlots);
+  const reloadReceive = useReceiveStore(s => s.reloadSlots);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function flash(msg: string) {
+    setNotice(msg);
+    window.setTimeout(() => setNotice(null), 4000);
+  }
+
+  function handleExport() {
+    const json = exportAllJSON();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = backupFileName();
+    a.click();
+    URL.revokeObjectURL(url);
+    flash('已匯出全部站位備份');
+  }
+
+  function handleImportClick() {
+    fileRef.current?.click();
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // 允許重選同檔
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = importAllJSON(String(reader.result ?? ''));
+      if (res.ok) {
+        // 兩個 store 重新載入 → 切到對應分頁即見還原
+        reloadDefense();
+        reloadReceive();
+        flash(`已匯入 防守${res.defenseCount}組／接發${res.receiveCount}組`);
+      } else {
+        flash(`匯入失敗：${res.error ?? '未知錯誤'}`);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  return (
+    <div style={styles.backupWrap}>
+      <button style={styles.backupBtn} onClick={handleExport} title="把防守與接發全部站位存成一個備份檔">
+        💾 匯出全部
+      </button>
+      <button style={styles.backupBtn} onClick={handleImportClick} title="從備份檔還原防守與接發全部站位">
+        📂 匯入全部
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json,.json"
+        style={{ display: 'none' }}
+        onChange={handleFile}
+      />
+      {notice && <span style={styles.backupNotice}>{notice}</span>}
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('defense');
 
@@ -48,6 +118,7 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <GlobalBackup />
       </header>
 
       {/* 分頁內容 */}
@@ -91,6 +162,33 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: '8px',
     flexWrap: 'wrap',
+  },
+  backupWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginLeft: 'auto',
+    flexWrap: 'wrap',
+  },
+  backupBtn: {
+    padding: '9px 14px',
+    fontSize: '0.95rem',
+    fontWeight: 700,
+    fontFamily: 'inherit',
+    borderRadius: '8px',
+    border: '1px solid #43A047',
+    background: '#1b5e20',
+    color: '#c8e6c9',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    touchAction: 'manipulation',
+    minHeight: '44px',
+  },
+  backupNotice: {
+    fontSize: '0.9rem',
+    fontWeight: 700,
+    color: '#a5d6a7',
+    whiteSpace: 'nowrap',
   },
   tab: {
     padding: '10px 20px',

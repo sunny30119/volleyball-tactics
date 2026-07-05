@@ -190,10 +190,32 @@ function setterBackStandPos(positionNo: PositionNo): Vec2 {
 /**
  * 取得該輪轉六人接發球站位座標（原始，尚未夾制）。
  */
+/**
+ * 三名接發員固定的「接發三角」槽位（左 / 中 / 右）。
+ * 橫向平均分布覆蓋後場寬度：左 z≈2.2、中 z≈4.5、右 z≈6.8；
+ * 深度交錯（中間那名略深）→ 三點不共線、兩兩橫向間距 ≥ 約 2.3m。
+ * x 皆在後場（接發起始位置），足以讓前排 MB/S 讓開網前。
+ */
+const PASSER_SLOTS: { x: number; z: number }[] = [
+  { x: 6.3, z: 2.1 }, // 左
+  { x: 7.3, z: 5.0 }, // 中（略深）
+  { x: 6.3, z: 7.3 }, // 右
+];
+
 function rawFormation(rotation: Rotation): ReceiveSpot[] {
   const lineup = getLineup(rotation);
   const setterPos = getSetterPosition(rotation);
   const setterFront = isFrontRow(setterPos);
+
+  // 三名接發員（OH1/OH2/L）：依其號位的基準 z 由小到大排序，
+  // 分別配到左/中/右三角槽位，使「接發佈局座標」始終左中右分散、不共線，
+  // 且相對 z 次序與號位一致（維持重疊規則）。
+  const passerPositions = lineup
+    .filter(e => isPasserRole(e.role))
+    .map(e => e.positionNo)
+    .sort((a, b) => BASE_Z[a] - BASE_Z[b]);
+  const passerSlotByPos = new Map<PositionNo, { x: number; z: number }>();
+  passerPositions.forEach((p, i) => passerSlotByPos.set(p, PASSER_SLOTS[i]));
 
   return lineup.map(entry => {
     const { positionNo, role } = entry;
@@ -202,9 +224,10 @@ function rawFormation(rotation: Rotation): ReceiveSpot[] {
     let pos: Vec2;
 
     if (isPasserRole(role)) {
-      // 接發員：後場接發弧線。前排號位的接發員站中前場（讓身後的後排舉球員能貼前插上），
-      // 後排接發員靠後接主要區。
-      pos = { x: front ? 4.2 : 6.9, z };
+      // 接發員：z 用固定接發三角槽位（左/中/右），始終橫向分散、不共線。
+      // x：後排接發員站深接主要區；前排號位的接發員站中前場，讓身後的後排舉球員能貼前插上。
+      const slot = passerSlotByPos.get(positionNo)!;
+      pos = { x: front ? 4.2 : slot.x, z: slot.z };
     } else if (role === 'S') {
       // 舉球員：前排直接站舉球定位；後排站最靠網前的合法接發起點。
       pos = setterFront ? { ...SETTER_TARGET } : setterBackStandPos(positionNo);

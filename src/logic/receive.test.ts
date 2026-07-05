@@ -234,6 +234,48 @@ describe('攻擊組織優先佈局（教練 2026-07 更新）', () => {
   });
 });
 
+describe('接發三角分散（教練 2026-07-05：三名接發員平均分散、不共線）', () => {
+  it('六輪轉下三名接發員兩兩橫向(z)間距 ≥ 2.0m', () => {
+    for (const r of ALL_ROTATIONS) {
+      const passers = getReceiveFormation(r).filter(s => s.isPasser);
+      expect(passers, `R${r}`).toHaveLength(3);
+      for (let i = 0; i < passers.length; i++) {
+        for (let j = i + 1; j < passers.length; j++) {
+          const dz = Math.abs(passers[i].pos.z - passers[j].pos.z);
+          expect(
+            dz,
+            `R${r} ${passers[i].role}-${passers[j].role} z 間距`,
+          ).toBeGreaterThanOrEqual(2.0);
+        }
+      }
+    }
+  });
+
+  it('六輪轉下三名接發員不共線（三角形面積 > 1.0）', () => {
+    for (const r of ALL_ROTATIONS) {
+      const [a, b, c] = getReceiveFormation(r).filter(s => s.isPasser);
+      const area =
+        Math.abs(
+          (b.pos.x - a.pos.x) * (c.pos.z - a.pos.z) -
+            (c.pos.x - a.pos.x) * (b.pos.z - a.pos.z),
+        ) / 2;
+      expect(area, `R${r} 接發三角面積`).toBeGreaterThan(1.0);
+    }
+  });
+
+  it('六輪轉下三名接發員覆蓋左/中/右（z 涵蓋 ≥ 4m，最左 ≤ 3、最右 ≥ 6.5）', () => {
+    for (const r of ALL_ROTATIONS) {
+      const zs = getReceiveFormation(r)
+        .filter(s => s.isPasser)
+        .map(s => s.pos.z)
+        .sort((x, y) => x - y);
+      expect(zs[0], `R${r} 最左接發員`).toBeLessThanOrEqual(3.0);
+      expect(zs[2], `R${r} 最右接發員`).toBeGreaterThanOrEqual(6.5);
+      expect(zs[2] - zs[0], `R${r} 接發橫向涵蓋`).toBeGreaterThanOrEqual(4.0);
+    }
+  });
+});
+
 describe('getSetterPath 舉球員插上路徑', () => {
   it('S 在前排回傳 null、後排回傳路徑', () => {
     for (const r of ALL_ROTATIONS) {

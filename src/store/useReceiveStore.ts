@@ -57,6 +57,8 @@ interface ReceiveState {
   loadReceiveSlot: (index: number) => void;
   exportSlotsJSON: () => string;
   importSlotsJSON: (json: string) => { ok: boolean; count: number; error?: string };
+  /** 從 localStorage 重新載入 slots（全域備份匯入後呼叫，畫面即時反映） */
+  reloadSlots: () => void;
 }
 
 const wrap = (r: number): Rotation => (((r - 1 + 6) % 6) + 1) as Rotation;
@@ -174,5 +176,9 @@ export const useReceiveStore = create<ReceiveState>((set, get) => ({
       set({ slots: res.slots });
     }
     return { ok: res.ok, count: res.count, error: res.error };
+  },
+
+  reloadSlots() {
+    set({ slots: loadSlots(), overridePositions: {} });
   },
 }));

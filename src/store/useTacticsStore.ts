@@ -109,6 +109,9 @@ interface TacticsState {
   /** 從 JSON 字串匯入情境（相容遷移），回傳結果供 UI 提示 */
   importScenariosFromJSON: (json: string) => { ok: boolean; count: number; error?: string };
 
+  /** 從 localStorage 重新載入 slots（全域備份匯入後呼叫，畫面即時反映） */
+  reloadSlots: () => void;
+
   /** 重置回預設狀態（不刪除已存情境） */
   resetAll: () => void;
 
@@ -327,6 +330,11 @@ export const useTacticsStore = create<TacticsState>((set, get) => ({
       get().recompute();
     }
     return result;
+  },
+
+  reloadSlots() {
+    set({ slots: loadScenarios() });
+    get().recompute();
   },
 
   resetAll() {

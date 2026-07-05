@@ -100,6 +100,64 @@ describe('computeDefense — 1、5 號位前壓（教練 2026-07-04：離網約 
   });
 });
 
+describe('computeDefense — 非攔網球員不重疊（教練 2026-07-05：4/5 及對稱側分開）', () => {
+  it('掃描多攻擊點，任兩名非攔網我方球員距離 ≥ 2.0m（兩體系、單雙攔）', () => {
+    for (const system of ['perimeter', 'rotation'] as const) {
+      for (const middleBlockMode of ['single', 'double'] as const) {
+        const opts: DefenseOptions = { ...BASE_OPTS, system, middleBlockMode };
+        for (const x of [-1, -2, -3, -4, -6, -8]) {
+          for (let z = 0.3; z <= 8.7; z += 0.25) {
+            const result = computeDefense({ x, z }, opts, NO_SCENARIOS);
+            const nb = result.players.filter(p => !p.isBlocking);
+            for (let i = 0; i < nb.length; i++) {
+              for (let j = i + 1; j < nb.length; j++) {
+                const d = dist(nb[i].pos, nb[j].pos);
+                expect(
+                  d,
+                  `${system}/${middleBlockMode} atk(${x},${z.toFixed(2)}) ${nb[i].id}-${nb[j].id}`,
+                ).toBeGreaterThanOrEqual(2.0);
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('教練實測點：opp4 攻擊手 {x:-2,z:7} 下 4 與 5 明顯分開（≥ 2.0m）', () => {
+    const result = computeDefense({ x: -2, z: 7 }, BASE_OPTS, NO_SCENARIOS);
+    const p4 = result.players.find(p => p.id === 4)!;
+    const p5 = result.players.find(p => p.id === 5)!;
+    expect(p4.isBlocking).toBe(false);
+    expect(p5.isBlocking).toBe(false);
+    expect(dist(p4.pos, p5.pos)).toBeGreaterThanOrEqual(2.0);
+  });
+
+  it('對稱側：opp2 攻擊手 {x:-2,z:2} 下 1 與 2 分開（≥ 2.0m）', () => {
+    const result = computeDefense({ x: -2, z: 2 }, BASE_OPTS, NO_SCENARIOS);
+    const p1 = result.players.find(p => p.id === 1)!;
+    const p2 = result.players.find(p => p.id === 2)!;
+    if (!p1.isBlocking && !p2.isBlocking) {
+      expect(dist(p1.pos, p2.pos)).toBeGreaterThanOrEqual(2.0);
+    }
+  });
+
+  it('分離後 1、5 號位前壓仍成立（x ≤ 4.0）', () => {
+    for (const system of ['perimeter', 'rotation'] as const) {
+      const opts: DefenseOptions = { ...BASE_OPTS, system };
+      for (let z = 0.5; z <= 8.5; z += 0.25) {
+        const result = computeDefense({ x: -1, z }, opts, NO_SCENARIOS);
+        for (const id of [1, 5]) {
+          const p = result.players.find(pp => pp.id === id)!;
+          if (!p.isBlocking) {
+            expect(p.pos.x, `${system} z=${z} 球員${id}`).toBeLessThanOrEqual(4.0);
+          }
+        }
+      }
+    }
+  });
+});
+
 describe('computeDefense — 攻擊扇形', () => {
   it('後排 6 號位攻擊（中間）扇形角度 >= 對方 4 號位邊線攻擊扇形角度', () => {
     const backCenter = computeDefense({ x: -6, z: 4.5 }, BASE_OPTS, NO_SCENARIOS);
