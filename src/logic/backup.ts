@@ -12,6 +12,13 @@ import {
   filledCount,
   type ReceiveSlots,
 } from './receiveSlots';
+import {
+  loadSlots as loadSetplaySlots,
+  normalizeToSlots as normalizeSetplay,
+  persistSlots as persistSetplaySlots,
+  filledCount as setplayFilledCount,
+  type SetplaySlots,
+} from './setplaySlots';
 
 // ============================================================
 // backup.ts — 全域備份：把「防守 10 槽 + 接發 10 槽」打包成單一 JSON。
@@ -20,22 +27,25 @@ import {
 //   localStorage keys（各自 tab 的 per-tab 匯出/匯入不受影響）：
 //     防守：volleyball-tactics-scenarios
 //     接發：volleyball-receive-slots
+//     配球：volleyball-setplay-slots
 // ============================================================
 
 /** 全域備份檔的版本（未來格式變動時遞增） */
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 export interface BackupPayload {
   version: number;
   exportedAt: string;         // ISO 時間字串
   defenseSlots: ScenarioSlots; // 長度 10（含 null）
   receiveSlots: ReceiveSlots;  // 長度 10（含 null）
+  setplaySlots: SetplaySlots;  // 長度 10（含 null）
 }
 
 export interface ImportResult {
   ok: boolean;
   defenseCount: number;  // 成功還原的防守站位數（非空槽）
   receiveCount: number;  // 成功還原的接發站位數（非空槽）
+  setplayCount: number;  // 成功還原的配球戰術數（非空槽）
   error?: string;
 }
 
@@ -48,6 +58,7 @@ export function exportAllJSON(): string {
     exportedAt: new Date().toISOString(),
     defenseSlots: normalizeDefense(loadScenarios()),
     receiveSlots: normalizeReceive(loadSlots()),
+    setplaySlots: normalizeSetplay(loadSetplaySlots()),
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -64,7 +75,13 @@ export function importAllJSON(json: string): ImportResult {
   try {
     parsed = JSON.parse(json);
   } catch (e) {
-    return { ok: false, defenseCount: 0, receiveCount: 0, error: `JSON 解析失敗：${String(e)}` };
+    return {
+      ok: false,
+      defenseCount: 0,
+      receiveCount: 0,
+      setplayCount: 0,
+      error: `JSON 解析失敗：${String(e)}`,
+    };
   }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -72,31 +89,37 @@ export function importAllJSON(json: string): ImportResult {
       ok: false,
       defenseCount: 0,
       receiveCount: 0,
-      error: '格式錯誤：頂層必須是備份物件（含 defenseSlots / receiveSlots）',
+      setplayCount: 0,
+      error: '格式錯誤：頂層必須是備份物件（含 defenseSlots / receiveSlots / setplaySlots）',
     };
   }
 
   const obj = parsed as Record<string, unknown>;
-  if (!('defenseSlots' in obj) && !('receiveSlots' in obj)) {
+  if (!('defenseSlots' in obj) && !('receiveSlots' in obj) && !('setplaySlots' in obj)) {
     return {
       ok: false,
       defenseCount: 0,
       receiveCount: 0,
-      error: '格式錯誤：缺少 defenseSlots 與 receiveSlots',
+      setplayCount: 0,
+      error: '格式錯誤：缺少 defenseSlots / receiveSlots / setplaySlots',
     };
   }
 
-  // 各自正規化（非法槽 → null，補足/截斷到 10 槽）。缺其中一項時該項視為全空。
+  // 各自正規化（非法槽 → null，補足/截斷到 10 槽）。
+  // 缺其中一項時該項視為全空（相容缺 setplaySlots 的舊版備份）。
   const defenseSlots = normalizeDefense(obj.defenseSlots);
   const receiveSlots = normalizeReceive(obj.receiveSlots);
+  const setplaySlots = normalizeSetplay(obj.setplaySlots);
 
   saveScenarios(defenseSlots);
   persistSlots(receiveSlots);
+  persistSetplaySlots(setplaySlots);
 
   return {
     ok: true,
     defenseCount: activeScenarios(defenseSlots).length,
     receiveCount: filledCount(receiveSlots),
+    setplayCount: setplayFilledCount(setplaySlots),
   };
 }
 

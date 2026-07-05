@@ -4,12 +4,14 @@ import './index.css'
 import App from './App.tsx'
 import { useTacticsStore } from './store/useTacticsStore'
 import { useReceiveStore } from './store/useReceiveStore'
+import { useSetplayStore } from './store/useSetplayStore'
 
 // 開發模式下暴露 store，方便 console / 自動化測試直接操作狀態
 if (import.meta.env.DEV) {
   const w = window as unknown as Record<string, unknown>;
   w.__tacticsStore = useTacticsStore;
   w.__receiveStore = useReceiveStore;
+  w.__setplayStore = useSetplayStore;
 }
 
 createRoot(document.getElementById('root')!).render(

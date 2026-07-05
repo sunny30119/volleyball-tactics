@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
 import { DefenseTab } from './features/defense/DefenseTab';
 import { ReceiveTab } from './features/receive/ReceiveTab';
+import { SetplayTab } from './features/setplay/SetplayTab';
 import { exportAllJSON, importAllJSON, backupFileName } from './logic/backup';
 import { useTacticsStore } from './store/useTacticsStore';
 import { useReceiveStore } from './store/useReceiveStore';
+import { useSetplayStore } from './store/useSetplayStore';
 
 // ============================================================
 // App — 主分頁架構
@@ -24,18 +26,11 @@ const TABS: Tab[] = [
   { id: 'setting', label: '舉球參數' },
 ];
 
-function PlaceholderTab({ label }: { label: string }) {
-  return (
-    <div style={placeholderStyles.container}>
-      <p style={placeholderStyles.text}>{label}｜功能開發中</p>
-    </div>
-  );
-}
-
-/** 全域備份：一鍵匯出/匯入「防守 10 槽 + 接發 10 槽」。 */
+/** 全域備份：一鍵匯出/匯入「防守 10 槽 + 接發 10 槽 + 配球 10 槽」。 */
 function GlobalBackup() {
   const reloadDefense = useTacticsStore(s => s.reloadSlots);
   const reloadReceive = useReceiveStore(s => s.reloadSlots);
+  const reloadSetplay = useSetplayStore(s => s.reloadSlots);
   const fileRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -68,10 +63,11 @@ function GlobalBackup() {
     reader.onload = () => {
       const res = importAllJSON(String(reader.result ?? ''));
       if (res.ok) {
-        // 兩個 store 重新載入 → 切到對應分頁即見還原
+        // 三個 store 重新載入 → 切到對應分頁即見還原
         reloadDefense();
         reloadReceive();
-        flash(`已匯入 防守${res.defenseCount}組／接發${res.receiveCount}組`);
+        reloadSetplay();
+        flash(`已匯入 防守${res.defenseCount}組／接發${res.receiveCount}組／配球${res.setplayCount}組`);
       } else {
         flash(`匯入失敗：${res.error ?? '未知錯誤'}`);
       }
@@ -125,7 +121,7 @@ export default function App() {
       <main style={styles.main}>
         {activeTab === 'defense' && <DefenseTab />}
         {activeTab === 'receive' && <ReceiveTab />}
-        {activeTab === 'setting' && <PlaceholderTab label="舉球參數" />}
+        {activeTab === 'setting' && <SetplayTab />}
       </main>
     </div>
   );
@@ -217,19 +213,5 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     display: 'flex',
     overflow: 'hidden',
-  },
-};
-
-const placeholderStyles: Record<string, React.CSSProperties> = {
-  container: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  text: {
-    fontSize: '1.5rem',
-    color: '#5c6bc0',
-    fontWeight: 600,
   },
 };
